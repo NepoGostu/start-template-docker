@@ -1,0 +1,87 @@
+version: '3'
+services:
+
+    #PHP Service
+    app:
+        build:
+            context: ./php-fpm/
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        tty: true
+        environment:
+            SERVICE_NAME: app
+            SERVICE_TAGS: dev
+        working_dir: /var/www
+        volumes:
+            - ../src:/var/www
+            - ./php-fpm/local.ini:/usr/local/etc/php/conf.d/local.ini
+        networks:
+            - dagestan-network
+
+    #Nginx Service
+    webserver:
+        image: nginx:alpine
+        restart: unless-stopped
+        tty: true
+        ports:
+            - "8010:80"
+            - "8011:443"
+        volumes:
+              - ../src:/var/www
+              - ./nginx/conf.d/:/etc/nginx/conf.d/
+        networks:
+            - dagestan-network
+
+    #MySQL Service
+    mysql:
+        build:
+            context: ./mariadb
+            args:
+                - http_proxy
+                - https_proxy
+                - no_proxy
+                - MARIADB_VERSION=10.8.2
+        volumes:
+            - ./storage/mariadb:/var/lib/mysql
+            - ./logs/mariadb:/var/log/mysql/
+        restart: always
+        tty: true
+        expose:
+            - "3306"
+        environment:
+            MYSQL_DATABASE: dagestan
+            MYSQL_USER: root
+            MYSQL_PASSWORD: secret
+            MYSQL_ROOT_PASSWORD: secret
+        networks:
+            - dagestan-network
+
+    ## phpMyAdmin ###########################################
+    phpmyadmin:
+        build:
+            context: ./phpmyadmin
+            dockerfile: Dockerfile
+        environment:
+            - PMA_ARBITRARY=1
+            - PMA_HOST=mysql
+            - PMA_PORT=3306
+            - MYSQL_USER=root
+            - MYSQL_PASSWORD=secret
+            - MYSQL_ROOT_PASSWORD=secret
+            - UPLOAD_LIMIT=1073741824
+        ports:
+            - "8012:80"
+        depends_on:
+            - mysql
+        links:
+            - mysql:mysql
+        restart: always
+        networks:
+            - dagestan-network
+
+
+
+#Docker Networks
+networks:
+    dagestan-network:
+        driver: bridge
